@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 import math
+from matplotlib import pyplot as pl
 
 e = 2.7182818284
 def sigma(x):
@@ -24,14 +25,22 @@ class MonteCarloAgent:
         self.dimensions = dimensions
         self.number_of_states = dimensions[0].number * dimensions[1].number * dimensions[2].number * dimensions[3].number
         self.states = np.zeros((self.number_of_states,2))
+
+    # def get_state(self, observation):
+    #     state = math.floor((observation[0] + self.dimensions[0].offset) / self.dimensions[0].max * self.dimensions[0].number)
+    #     state += math.floor(sigma(observation[1]) * self.dimensions[1].number) * self.dimensions[0].number
+    #     state += math.floor(
+    #         (observation[2] + self.dimensions[2].offset) / self.dimensions[2].max * self.dimensions[2].number) * \
+    #              self.dimensions[0].number * self.dimensions[1].number
+    #     state += math.floor(sigma(observation[3]) * self.dimensions[3].number) * self.dimensions[0].number * self.dimensions[
+    #         1].number * self.dimensions[2].number
+    #     return int(state)
+
     def get_state(self, observation):
-        state = math.floor((observation[0] + self.dimensions[0].offset) / self.dimensions[0].max * self.dimensions[0].number)
+        state = math.floor(sigma(observation[0]) * self.dimensions[0].number)
         state += math.floor(sigma(observation[1]) * self.dimensions[1].number) * self.dimensions[0].number
-        state += math.floor(
-            (observation[2] + self.dimensions[2].offset) / self.dimensions[2].max * self.dimensions[2].number) * \
-                 self.dimensions[0].number * self.dimensions[1].number
-        state += math.floor(sigma(observation[3]) * self.dimensions[3].number) * self.dimensions[0].number * self.dimensions[
-            1].number * self.dimensions[2].number
+        state += math.floor(sigma(observation[2]) * self.dimensions[2].number) * self.dimensions[0].number * self.dimensions[1].number
+        state += math.floor(sigma(observation[3]) * self.dimensions[3].number) * self.dimensions[0].number * self.dimensions[1].number * self.dimensions[2].number
         return int(state)
 
     def make_action(self, state, epsilon):
@@ -39,7 +48,7 @@ class MonteCarloAgent:
 
 
     def update_policy(self, session, gamma):
-        N = np.zeros((self.number_of_states,2))
+        N = np.zeros((self.number_of_states, 2))
         G = list()
 
         d_gamma = gamma
@@ -61,19 +70,16 @@ class MonteCarloAgent:
         states, actions, rewards = list(), list(), list()
 
         for i in range(session_length):
-
             state = self.get_state(observation)
-            states.append(state)
             action = self.make_action(state, epsilon)
-            actions.append(action)
-
             observation, reward, done, _ = environment.step(action)
-            rewards.append(reward)
             if render:
                 environment.render()
             if done:
                 break
-
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
         return {
             "states": states,
             "actions": actions,
@@ -81,12 +87,32 @@ class MonteCarloAgent:
             "total_reward": sum(rewards)
         }
 
-
-dimensions = (Dimension(9.6, 4.8, 10), Dimension(1, 0, 10), Dimension(0.936, 0.418, 10), Dimension(1, 0, 10))
+dis = 11
+dimensions = (Dimension(9.6, 4.8, dis), Dimension(1, 0, dis), Dimension(0.936, 0.418, dis), Dimension(1, 0, dis))
 agent = MonteCarloAgent(dimensions)
 environment = gym.make("CartPole-v0")
 
-episod_count = 100
-for i in range(episod_count):
-    session = agent.get_session(100,environment,0.1,True)
-    agent.update_policy(session,0.99)
+episode_count = 10000
+clear_episode_count = 1000
+rewards = list()
+
+epsilon = 0.1
+d_epsilon = epsilon / episode_count
+for i in range(episode_count):
+    session = agent.get_session(500, environment, epsilon)
+    agent.update_policy(session, 0.99)
+    epsilon -= d_epsilon
+    rewards.append(session["total_reward"])
+
+for i in range(clear_episode_count):
+    session = agent.get_session(500, environment, 0)
+    agent.update_policy(session, 0.99)
+    rewards.append(session["total_reward"])
+
+plot = pl.plot(range(episode_count + clear_episode_count), rewards)
+pl.show()
+
+for i in range(10):
+    session = agent.get_session(500, environment, 0, True)
+    agent.update_policy(session, 0.99)
+    rewards.append(session["total_reward"])
