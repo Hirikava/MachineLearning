@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import math
 
 e = 2.7182818284
 def sigma(x):
@@ -21,17 +22,15 @@ class Dimension:
 class MonteCarloAgent:
     def __init__(self, dimensions):
         self.dimensions = dimensions
-        self.states = np.full(
-            (dimensions[0].number * dimensions[1].number * dimensions[2].number * dimensions[3].number, 2), 1)
-        self.states = self.states / 2
-
+        self.number_of_states = dimensions[0].number * dimensions[1].number * dimensions[2].number * dimensions[3].number
+        self.states = np.zeros((self.number_of_states,2))
     def get_state(self, observation):
-        state = round((observation[0] + self.dimensions[0].offset) / self.dimensions[0].max * self.dimensions[0].number)
-        state += round(sigma(observation[1]) * self.dimensions[1].number) * self.dimensions[0].number
-        state += round(
+        state = math.floor((observation[0] + self.dimensions[0].offset) / self.dimensions[0].max * self.dimensions[0].number)
+        state += math.floor(sigma(observation[1]) * self.dimensions[1].number) * self.dimensions[0].number
+        state += math.floor(
             (observation[2] + self.dimensions[2].offset) / self.dimensions[2].max * self.dimensions[2].number) * \
                  self.dimensions[0].number * self.dimensions[1].number
-        state += round(sigma(observation[3]) * self.dimensions[3].number) * self.dimensions[0].number * self.dimensions[
+        state += math.floor(sigma(observation[3]) * self.dimensions[3].number) * self.dimensions[0].number * self.dimensions[
             1].number * self.dimensions[2].number
         return int(state)
 
@@ -39,13 +38,27 @@ class MonteCarloAgent:
         return get_epsilon_greedy_action(self.states[state], epsilon, 2)
 
 
-    def update_policy(self):
-        pass
+    def update_policy(self, session, gamma):
+        N = np.zeros((self.number_of_states,2))
+        G = list()
+
+        d_gamma = gamma
+        G.append(session["rewards"][-1])
+        for reward in session["rewards"][-1::-1]:
+            G.append(reward * d_gamma + G[-1])
+            d_gamma *= gamma
+        G.reverse()
+
+        for t in range(len(session["actions"])):
+            state = session["states"][t]
+            action = session["actions"][t]
+            self.states[state][action] += (G[t] - self.states[state][action]) / (1 + N[state][action])
+            N[state][action] += 1
+
 
     def get_session(self, session_length, environment, epsilon, render=False):
         observation = environment.reset()
-        states, actions = list(), list()
-        total_reward = 0
+        states, actions, rewards = list(), list(), list()
 
         for i in range(session_length):
 
@@ -55,7 +68,7 @@ class MonteCarloAgent:
             actions.append(action)
 
             observation, reward, done, _ = environment.step(action)
-            total_reward += reward
+            rewards.append(reward)
             if render:
                 environment.render()
             if done:
@@ -64,14 +77,16 @@ class MonteCarloAgent:
         return {
             "states": states,
             "actions": actions,
-            "total_reward": total_reward
+            "rewards": rewards,
+            "total_reward": sum(rewards)
         }
 
 
 dimensions = (Dimension(9.6, 4.8, 10), Dimension(1, 0, 10), Dimension(0.936, 0.418, 10), Dimension(1, 0, 10))
 agent = MonteCarloAgent(dimensions)
-
 environment = gym.make("CartPole-v0")
-environment.reset()
 
-agent.get_session(100,environment,0.1,True);
+episod_count = 100
+for i in range(episod_count):
+    session = agent.get_session(100,environment,0.1,True)
+    agent.update_policy(session,0.99)
