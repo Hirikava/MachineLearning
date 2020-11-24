@@ -1,11 +1,7 @@
 import gym
 import numpy as np
 import math
-from matplotlib import pyplot as pl
-
-e = 2.7182818284
-def sigma(x):
-    return 1 / (1 + pow(e, -x))
+import graphics_utils
 
 def get_epsilon_greedy_action(q_values, epsilon, number_of_actions):
     prob = np.ones(number_of_actions) * epsilon / number_of_actions
@@ -44,11 +40,9 @@ class MonteCarloAgent:
         N = np.zeros((self.number_of_states, 2))
         G = list()
 
-        d_gamma = gamma
         G.append(session["rewards"][-1])
         for reward in session["rewards"][-1::-1]:
-            G.append(reward * d_gamma + G[-1])
-            d_gamma *= gamma
+            G.append(reward + G[-1] * gamma)
         G.reverse()
 
         for t in range(len(session["actions"])):
@@ -60,11 +54,9 @@ class MonteCarloAgent:
 
     def get_session(self, session_length, environment, epsilon, render=False):
         observation = environment.reset()
-        states, actions, rewards, v1, v2 = list(), list(), list(), list(), list()
+        states, actions, rewards = list(), list(), list()
 
         for i in range(session_length):
-            v1.append(observation[1])
-            v2.append(observation[2])
             state = self.get_state(observation)
             action = self.make_action(state, epsilon)
             observation, reward, done, _ = environment.step(action)
@@ -79,19 +71,18 @@ class MonteCarloAgent:
             "states": states,
             "actions": actions,
             "rewards": rewards,
-            "total_reward": sum(rewards)
-
+            "total_reward": sum(rewards),
         }
 
-dis = 7
-dimensions = (Dimension(9.6, 4.8, dis), Dimension(10, 5, dis*2), Dimension(0.936, 0.418, dis*4), Dimension(10, 5, dis*2))
+dimensions = (Dimension(9.6, 4.8, 10), Dimension(10, 5, 10), Dimension(0.936, 0.418, 60), Dimension(10,5, 10))
 agent = MonteCarloAgent(dimensions)
 environment = gym.make("CartPole-v0")
 
-episode_count = 2000
+episode_count = 20000
 clear_episode_count = 100
-rewards = list()
 session_length = 200
+
+rewards = list()
 
 epsilon = 1
 d_epsilon = epsilon / episode_count
@@ -100,19 +91,15 @@ for i in range(episode_count):
     print(str(i) + '/' + str(episode_count))
     session = agent.get_session(session_length, environment, epsilon)
     agent.update_policy(session, 0.99)
-    epsilon = max(epsilon - d_epsilon, 0)
+    epsilon -= d_epsilon
     rewards.append(session["total_reward"])
 
 for i in range(clear_episode_count):
     print(str(i) + '/' + str(clear_episode_count) + " clear")
     session = agent.get_session(session_length, environment, 0)
-    #agent.update_policy(session, 0.99)
     rewards.append(session["total_reward"])
 
-plot = pl.plot(range(episode_count + clear_episode_count), rewards)
-pl.show()
+graphics_utils.draw_plain_graphics_with_avarage_window(rewards, 500)
 
 for i in range(10):
     session = agent.get_session(session_length, environment, 0, True)
-    agent.update_policy(session, 0.99)
-    rewards.append(session["total_reward"])
